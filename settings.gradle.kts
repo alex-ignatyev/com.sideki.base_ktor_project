@@ -1,0 +1,1 @@
+rootProject.name = "com.sideki.base_ktor_project"
