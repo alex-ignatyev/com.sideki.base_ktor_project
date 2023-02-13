@@ -2,15 +2,17 @@ package com.base_ktor_project.feature.auth.registration
 
 import com.base_ktor_project.db.UsersDatabase
 import com.base_ktor_project.model.LoginRequest
-import com.base_ktor_project.model.TokenResponse
 import com.base_ktor_project.model.User
+import com.base_ktor_project.security.password_hashing.SHA256HashingService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveOrNull
 import io.ktor.server.response.respond
-import java.util.UUID
 
-class RegistrationController(private val call: ApplicationCall) {
+class RegistrationController(
+    private val hashingService: SHA256HashingService,
+    private val call: ApplicationCall
+) {
 
     suspend fun performRegistration(userDb: UsersDatabase) {
         val receive = call.receiveOrNull<LoginRequest>() ?: kotlin.run {
@@ -24,18 +26,22 @@ class RegistrationController(private val call: ApplicationCall) {
             return
         }
 
-        val user = User(
-            username = receive.login,
-            password = receive.password
-        )
-
-        val wasAcknowledged = userDb.insertUser(user)
-
-        if (!wasAcknowledged) {
-            call.respond(HttpStatusCode.Conflict)
+        if (createUser(userDb, receive)) {
+            call.respond(HttpStatusCode.OK)
             return
         }
 
-        call.respond(HttpStatusCode.OK)
+        call.respond(HttpStatusCode.Conflict)
+    }
+
+    private suspend fun createUser(userDb: UsersDatabase, receive: LoginRequest): Boolean {
+        val saltedHashPassword = hashingService.generateSaltedHash(receive.password)
+        val user = User(
+            username = receive.login,
+            password = saltedHashPassword.hash,
+            salt = saltedHashPassword.salt
+        )
+
+        return userDb.insertUser(user)
     }
 }
